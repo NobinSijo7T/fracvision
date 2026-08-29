@@ -1,0 +1,32 @@
+# ---- Base image ----
+# CUDA 12.1 + Python 3.11. Use pytorch/pytorch base for GPU build.
+FROM pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime
+
+WORKDIR /app
+
+# System dependencies for OpenCV, SimpleITK
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy source code
+COPY model/ ./model/
+COPY backend/ ./backend/
+COPY pyproject.toml .
+COPY .env.example .
+
+# Create required directories
+RUN mkdir -p model/checkpoints model/reports model/logs model/data/splits model/data/splits
+
+EXPOSE 8000
+
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,0 +1,135 @@
+@import "tailwindcss";
+
+/* ======================================================
+   FracVision Design System — Tailwind v4 compatible
+   ====================================================== */
+
+/* CSS Custom Properties */
+:root {
+  --color-accent: 139 92 246;
+  --color-surface: 15 17 26;
+  --color-surface-2: 20 23 38;
+}
+
+/* ---- Glass morphism card ---- */
+.glass {
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  backdrop-filter: blur(8px);
+}
+
+/* ---- Gradient text ---- */
+.gradient-text {
+  background: linear-gradient(to right, #a78bfa, #c084fc, #67e8f9);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ---- Glow button ---- */
+.btn-glow {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.75rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+  background-color: #7c3aed;
+  color: white;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s, box-shadow 0.2s;
+  box-shadow: 0 0 24px rgba(139, 92, 246, 0.35);
+  text-decoration: none;
+}
+.btn-glow:hover {
+  background-color: #8b5cf6;
+  box-shadow: 0 0 36px rgba(139, 92, 246, 0.55);
+}
+.btn-glow:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* ---- Secondary button ---- */
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  border-radius: 0.75rem;
+  font-weight: 500;
+  font-size: 0.875rem;
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  color: #cbd5e1;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+.btn-secondary:hover {
+  background-color: rgba(255, 255, 255, 0.10);
+  border-color: rgba(255, 255, 255, 0.20);
+  color: white;
+}
+
+/* ---- Drop zone ---- */
+.drop-zone {
+  border: 2px dashed rgba(255, 255, 255, 0.15);
+  border-radius: 1rem;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+.drop-zone:hover, .drop-zone.active {
+  border-color: rgba(139, 92, 246, 0.5);
+  background-color: rgba(139, 92, 246, 0.05);
+}
+.drop-zone.active {
+  border-color: #a78bfa;
+  background-color: rgba(139, 92, 246, 0.10);
+}
+
+/* ---- Status badges ---- */
+.badge-detected {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.30);
+}
+.badge-clear {
+  background-color: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.30);
+}
+.badge-warning {
+  background-color: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.30);
+}
+
+/* ---- Animated pulse ring ---- */
+@keyframes ring-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.4); }
+  70%  { box-shadow: 0 0 0 12px rgba(139, 92, 246, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0); }
+}
+.pulse-ring {
+  animation: ring-pulse 2s infinite;
+}
+
+/* ---- Scrollbar ---- */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.10);
+  border-radius: 9999px;
+}
+
+/* ---- Base ---- */
+body {
+  background-color: #0a0b14;
+  color: #f1f5f9;
+  min-height: 100vh;
+}

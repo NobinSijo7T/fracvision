@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=70", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "fracvision"
+version = "0.1.0"
+description = "Multimodal X-ray Fracture Analysis and Recovery Prediction using DINOv2 and Mamba"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Research use only — not for clinical deployment" }
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["model*", "backend*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::UserWarning:torch",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+select = ["E", "F", "W", "I", "N", "UP"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+warn_return_any = false

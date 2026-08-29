@@ -1,0 +1,118 @@
+services:
+
+  # -----------------------------------------------------------------------
+  # ML service — DINOv2, RT-DETRv2, MedSAM, Mamba
+  # -----------------------------------------------------------------------
+  ml-service:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    command: uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./model:/app/model:ro        # datasets & checkpoints (read-only)
+      - ./backend:/app/backend
+      - ./model/checkpoints:/app/model/checkpoints  # writeable for training
+      - ./model/reports:/app/model/reports
+      - ./model/logs:/app/model/logs
+      - ./model/data/splits:/app/model/data/splits
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///./fracvision_dev.db}
+      - FRACATLAS_ROOT=${FRACATLAS_ROOT:-model/datasets/FracAtlas}
+      - GRAZPEDWRI_ROOT=${GRAZPEDWRI_ROOT:-model/datasets/GRAZPEDWRI-DX}
+      - MEDSAM_CHECKPOINT=${MEDSAM_CHECKPOINT:-}
+      - MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI:-}
+      - FRACVISION_CONFIG=model/configs/config.yaml
+    depends_on:
+      db:
+        condition: service_healthy
+    # GPU profile — enabled when `--profile gpu` is passed
+    profiles: ["default", "gpu"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+              count: all
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # CPU-only dev variant (no GPU reservation)
+  ml-service-cpu:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    command: uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./model:/app/model:ro
+      - ./backend:/app/backend
+      - ./model/checkpoints:/app/model/checkpoints
+      - ./model/reports:/app/model/reports
+      - ./model/logs:/app/model/logs
+      - ./model/data/splits:/app/model/data/splits
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///./fracvision_dev.db}
+      - FRACATLAS_ROOT=${FRACATLAS_ROOT:-model/datasets/FracAtlas}
+      - GRAZPEDWRI_ROOT=${GRAZPEDWRI_ROOT:-model/datasets/GRAZPEDWRI-DX}
+      - FRACVISION_CONFIG=model/configs/config.yaml
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles: ["cpu"]
+
+  # -----------------------------------------------------------------------
+  # Next.js frontend
+  # -----------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    profiles: ["default", "gpu", "cpu"]
+
+  # -----------------------------------------------------------------------
+  # PostgreSQL database
+  # -----------------------------------------------------------------------
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: fracvision
+      POSTGRES_USER: fracvision
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fracvision -d fracvision"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    profiles: ["default", "gpu", "cpu"]
+
+  # -----------------------------------------------------------------------
+  # MLflow experiment tracking (optional)
+  # -----------------------------------------------------------------------
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.12.2
+    command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri /mlruns
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow_data:/mlruns
+    profiles: ["mlflow"]
+
+volumes:
+  postgres_data:
+  mlflow_data:

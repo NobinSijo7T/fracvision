@@ -1,0 +1,175 @@
+# FracVision master configuration
+# All dataset and checkpoint paths are relative to the project root
+# or can be overridden via environment variables (see .env.example).
+# DO NOT hard-code machine-specific absolute paths here.
+
+project_name: FracVision
+seed: 42
+device: auto   # "auto" → CUDA if available, else CPU
+
+# ---------------------------------------------------------------------------
+# Data paths (relative to project root; can be overridden by env vars)
+# ---------------------------------------------------------------------------
+data:
+  fracatlas_path: model/datasets/FracAtlas
+  grazpedwri_path: model/datasets/GRAZPEDWRI-DX
+  # Extracted GRAZPEDWRI images land here (auto-created by adapter)
+  grazpedwri_images_dir: model/datasets/GRAZPEDWRI-DX/folder_structure/images
+  split_dir: model/data/splits
+  reports_dir: model/reports
+  embedding_cache_dir: model/data/embedding_cache
+  pair_cache_dir: model/data/pair_cache
+
+# ---------------------------------------------------------------------------
+# Class mappings — only classes that actually exist in the inspected datasets
+# ---------------------------------------------------------------------------
+class_mappings:
+  fracatlas:
+    # Binary fracture label
+    fracture: [fractured]
+    # Body-part labels (from dataset.csv binary columns)
+    body_part: [hand, leg, hip, shoulder, mixed]
+    # View labels
+    view: [frontal, lateral, oblique]
+    # Hardware / multi-scan flags
+    other: [hardware, multiscan]
+    # YOLO class index → name (class 0 = fracture in YOLO files)
+    yolo_class_map:
+      0: fracture
+  grazpedwri:
+    # Labels confirmed from VOC XML inspection
+    detection_classes: [fracture, pronatorsign, periostealreaction, text, softissue, boneoutline, hardwareother]
+    # Binary fracture-visible label from CSV
+    fracture_visible_col: fracture_visible
+    # AO classification column (present but sparse)
+    ao_classification_col: ao_classification
+
+# ---------------------------------------------------------------------------
+# Image preprocessing
+# ---------------------------------------------------------------------------
+preprocessing:
+  image_size: 1024        # pixels (square after padding)
+  grayscale: true         # convert to single-channel
+  clahe_clip_limit: 2.0   # contrast-limited adaptive histogram equalization
+  clahe_tile_grid: 8      # tile grid size
+  normalize_mean: [0.5]   # per-channel mean (grayscale)
+  normalize_std: [0.5]    # per-channel std
+  min_dimension: 64       # reject images smaller than this
+
+# ---------------------------------------------------------------------------
+# Training (phase-specific overrides under each phase key)
+# ---------------------------------------------------------------------------
+training:
+  batch_size: 4
+  num_workers: 2
+  pin_memory: true
+  gradient_clip: 1.0
+
+  phase_1_dinov2_adaptation:
+    enabled: true
+    model_name: dinov2_vits14          # vits14 | vitb14 | vitl14 | vitg14
+    frozen_baseline: true              # run frozen-feature linear probe first
+    fine_tune_layers: 0               # 0 = fully frozen; >0 = unfreeze top N blocks
+    learning_rate: 1.0e-4
+    weight_decay: 1.0e-4
+    epochs: 20
+    warmup_epochs: 2
+    scheduler: cosine
+
+  phase_2_detection:
+    enabled: true
+    model_variant: rtdetrv2_r50vd     # backbone variant
+    learning_rate: 1.0e-4
+    weight_decay: 1.0e-4
+    epochs: 50
+    warmup_epochs: 5
+    scheduler: cosine
+    # mAP metric used for best-checkpoint selection
+    monitor_metric: val_map50
+
+  phase_3_segmentation:
+    enabled: true
+    # MedSAM checkpoint path — set to null to skip supervised seg training
+    medsam_checkpoint: null            # e.g. model/checkpoints/medsam.pth
+    learning_rate: 1.0e-5
+    epochs: 30
+    dice_weight: 0.5
+    bce_weight: 0.5
+
+  phase_4_classification:
+    enabled: true
+    learning_rate: 1.0e-4
+    weight_decay: 1.0e-4
+    epochs: 30
+    warmup_epochs: 3
+    scheduler: cosine
+    use_focal_loss: true
+    focal_alpha: 0.25
+    focal_gamma: 2.0
+
+  phase_5_serial_comparison:
+    enabled: true
+    min_studies_per_patient: 2        # skip patients with only 1 study
+
+  phase_6_mamba_longitudinal:
+    enabled: true
+    mamba_d_model: 256
+    mamba_d_state: 16
+    mamba_d_conv: 4
+    mamba_expand: 2
+    mamba_n_layers: 4
+    learning_rate: 5.0e-5
+    epochs: 40
+    warmup_epochs: 4
+    scheduler: cosine
+
+  phase_7_recovery:
+    enabled: false   # DISABLED — no verified clinical outcome labels in either dataset
+    disabled_reason: >
+      Neither FracAtlas nor GRAZPEDWRI-DX provides verified time-to-union or
+      censoring-status labels. Supervised recovery-time training is not performed.
+      The RecoveryPredictionModule is implemented as an inference-ready stub only.
+
+# ---------------------------------------------------------------------------
+# Model checkpoints (null = not available, will warn and skip loading)
+# ---------------------------------------------------------------------------
+models:
+  dinov2_checkpoint: null               # auto-downloaded from torch.hub
+  rtdetrv2_checkpoint: null             # null → train from pretrained backbone
+  medsam_checkpoint: null               # provide path when checkpoint is available
+  mamba_checkpoint: null                # set after phase_6 training
+
+  # Saved best checkpoints (written by training scripts)
+  dinov2_classifier_best: model/checkpoints/dinov2_classifier_best.pth
+  rtdetrv2_best: model/checkpoints/rtdetrv2_best.pt
+  medsam_best: model/checkpoints/medsam_best.pth
+  mamba_longitudinal_best: model/checkpoints/mamba_longitudinal_best.pth
+
+# ---------------------------------------------------------------------------
+# Inference thresholds
+# ---------------------------------------------------------------------------
+inference:
+  detection_score_threshold: 0.30    # discard boxes below this confidence
+  detection_iou_threshold: 0.50      # NMS IoU threshold
+  max_detections: 20
+  embedding_batch_size: 8            # DINOv2 extraction batch size
+
+# ---------------------------------------------------------------------------
+# Logging & experiment tracking
+# ---------------------------------------------------------------------------
+logging:
+  level: INFO
+  log_dir: model/logs
+  mlflow_tracking_uri: null          # null → local ./mlruns; set to remote URI for prod
+  mlflow_experiment_name: fracvision
+
+# ---------------------------------------------------------------------------
+# Backend (FastAPI)
+# ---------------------------------------------------------------------------
+backend:
+  host: 0.0.0.0
+  port: 8000
+  max_upload_mb: 50
+  allow_origins: ["http://localhost:3000"]
+  # Database URL — read from environment variable DATABASE_URL
+  database_url_env: DATABASE_URL
