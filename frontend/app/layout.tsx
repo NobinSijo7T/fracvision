@@ -1,14 +1,25 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Cormorant_Garamond } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "@/components/Navbar";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
+
+const cormorant = Cormorant_Garamond({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600"],
+  variable: "--font-cormorant",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
-  title: "FracVision — X-ray Fracture Analysis",
+  title: "FracVision — Multimodal X-ray Fracture Analysis",
   description:
-    "Research prototype for AI-assisted fracture detection and recovery analysis using DINOv2 and Mamba. Not for clinical use.",
+    "AI-assisted fracture detection and recovery analysis using DINOv2, RT-DETRv2, MedSAM, and Mamba. Research prototype.",
 };
 
 export default function RootLayout({
@@ -17,10 +28,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark">
-      <body className={`${inter.className} bg-[#0a0b14] text-slate-100 min-h-screen`}>
+    <html lang="en" className={`${inter.variable} ${cormorant.variable}`}>
+      <body className="font-sans bg-[#fffefc] text-[#222222] min-h-screen antialiased selection:bg-[#e1f4df] selection:text-[#0f3e17]">
         <Navbar />
-        <main className="pt-16">{children}</main>
+        <main className="pt-20">{children}</main>
       </body>
     </html>
   );

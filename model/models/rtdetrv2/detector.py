@@ -21,6 +21,7 @@ Classes trained are ONLY those present in the inspected dataset annotations:
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
 import torch
@@ -118,28 +119,54 @@ class RTDETRv2Detector(nn.Module):
         try:
             from transformers import AutoImageProcessor, AutoModelForObjectDetection
 
-            if checkpoint_path:
-                import os
-                from pathlib import Path
-                if Path(checkpoint_path).exists():
-                    logger.info("Loading RT-DETRv2 from local checkpoint: %s", checkpoint_path)
-                    processor = AutoImageProcessor.from_pretrained(checkpoint_path)
-                    model = AutoModelForObjectDetection.from_pretrained(checkpoint_path)
-                    model = model.to(self.device)
-                    return model, processor
-
-            # Pretrained RT-DETR backbone (will be fine-tuned)
-            logger.info("Loading pretrained RT-DETR-R50 from Hugging Face ...")
-            model_id = "PekingU/rtdetr_r50vd_coco_o365"
+            checkpoint = Path(checkpoint_path) if checkpoint_path else None
+            model_id = str(checkpoint) if checkpoint and checkpoint.is_dir() else "PekingU/rtdetr_r50vd_coco_o365"
+            logger.info("Loading RT-DETRv2 model from %s ...", model_id)
             processor = AutoImageProcessor.from_pretrained(model_id)
             model = AutoModelForObjectDetection.from_pretrained(model_id)
 
             # Replace classification head for our class set
             in_features = model.model.decoder.class_embed[-1].in_features
             model.model.decoder.class_embed = nn.ModuleList([
-                nn.Linear(in_features, self.n_classes + 1)
+                nn.Linear(in_features, self.n_classes)
                 for _ in model.model.decoder.class_embed
             ])
+            encoder_features = model.model.enc_score_head.in_features
+            model.model.enc_score_head = nn.Linear(encoder_features, self.n_classes)
+            model.config.num_labels = self.n_classes
+            model.config.id2label = {i: name for i, name in enumerate(self.class_names)}
+            model.config.label2id = {name: i for i, name in enumerate(self.class_names)}
+
+            # A training run saves a state_dict (.pt), not a Hugging Face
+            # directory. Load that state_dict after constructing the matching
+            # class head. Previously this file was silently ignored and the
+            # new detection head stayed randomly initialized.
+            if checkpoint and checkpoint.is_file():
+                state = torch.load(checkpoint, map_location="cpu")
+                if isinstance(state, dict) and "state_dict" in state:
+                    state = state["state_dict"]
+                # Training saves RTDETRv2Detector.state_dict(), which adds
+                # the wrapper's leading `model.` namespace. The object being
+                # loaded here is the inner Hugging Face model.
+                if state and not any(key in model.state_dict() for key in state):
+                    state = {
+                        key.removeprefix("model."): value
+                        for key, value in state.items()
+                    }
+                model_state = model.state_dict()
+                compatible_state = {
+                    key: value for key, value in state.items()
+                    if key in model_state and model_state[key].shape == value.shape
+                }
+                skipped = len(state) - len(compatible_state)
+                missing, unexpected = model.load_state_dict(compatible_state, strict=False)
+                logger.info(
+                    "Loaded RT-DETR checkpoint %s (%d missing, %d unexpected, %d shape-incompatible keys)",
+                    checkpoint,
+                    len(missing),
+                    len(unexpected),
+                    skipped,
+                )
             model = model.to(self.device)
             logger.info("RT-DETRv2: replaced detection head for %d classes", self.n_classes)
             return model, processor

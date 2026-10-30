@@ -48,7 +48,7 @@ class_mappings:
 # Image preprocessing
 # ---------------------------------------------------------------------------
 preprocessing:
-  image_size: 1024        # pixels (square after padding)
+  image_size: 1008        # pixels (square after padding; divisible by DINOv2's 14px patches)
   grayscale: true         # convert to single-channel
   clahe_clip_limit: 2.0   # contrast-limited adaptive histogram equalization
   clahe_tile_grid: 8      # tile grid size
@@ -81,7 +81,7 @@ training:
     model_variant: rtdetrv2_r50vd     # backbone variant
     learning_rate: 1.0e-4
     weight_decay: 1.0e-4
-    epochs: 50
+    epochs: 5
     warmup_epochs: 5
     scheduler: cosine
     # mAP metric used for best-checkpoint selection
@@ -135,8 +135,8 @@ training:
 # ---------------------------------------------------------------------------
 models:
   dinov2_checkpoint: null               # auto-downloaded from torch.hub
-  rtdetrv2_checkpoint: null             # null → train from pretrained backbone
-  medsam_checkpoint: null               # provide path when checkpoint is available
+  rtdetrv2_checkpoint: model/checkpoints/rtdetrv2_best.pt
+  medsam_checkpoint: model/checkpoints/medsam.pth
   mamba_checkpoint: null                # set after phase_6 training
 
   # Saved best checkpoints (written by training scripts)

@@ -1,135 +1,280 @@
 @import "tailwindcss";
 
-/* ======================================================
-   FracVision Design System — Tailwind v4 compatible
-   ====================================================== */
+@theme {
+  --color-forest-ink: #0f3e17;
+  --color-sage-mist: #b1dbb8;
+  --color-keylime-wash: #e1f4df;
+  --color-mint-veil: #cfe7d3;
+  --color-slate-hush: #b6ced5;
+  --color-cream-paper: #fffefc;
+  --color-charcoal: #222222;
+  --color-border-mist: #efeeeb;
+  --color-forest-shadow: #0c2f10;
 
-/* CSS Custom Properties */
+  --font-serif: var(--font-cormorant), 'Cormorant Garamond', 'Faire Octave', Georgia, serif;
+  --font-sans: var(--font-inter), 'Suisse Intl', Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
 :root {
-  --color-accent: 139 92 246;
-  --color-surface: 15 17 26;
-  --color-surface-2: 20 23 38;
+  --color-forest-ink: #0f3e17;
+  --color-sage-mist: #b1dbb8;
+  --color-keylime-wash: #e1f4df;
+  --color-mint-veil: #cfe7d3;
+  --color-slate-hush: #b6ced5;
+  --color-cream-paper: #fffefc;
+  --color-charcoal: #222222;
+  --color-border-mist: #efeeeb;
+  --color-forest-shadow: #0c2f10;
+
+  --radius-nav: 7px;
+  --radius-cards: 14px;
+  --radius-badges: 999px;
+  --radius-buttons: 14px;
+  --radius-pill: 9999px;
 }
 
-/* ---- Glass morphism card ---- */
-.glass {
-  background-color: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  backdrop-filter: blur(8px);
+/* Base resets & typography */
+body {
+  background-color: var(--color-cream-paper);
+  color: var(--color-charcoal);
+  font-family: var(--font-sans);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* ---- Gradient text ---- */
-.gradient-text {
-  background: linear-gradient(to right, #a78bfa, #c084fc, #67e8f9);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  color: transparent;
+/* Display serif headings - strictly weight 300 */
+.font-display {
+  font-family: var(--font-cormorant), 'Cormorant Garamond', Georgia, serif;
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  color: var(--color-forest-ink);
 }
 
-/* ---- Glow button ---- */
-.btn-glow {
-  position: relative;
+/* Eyebrow label - strictly 11px uppercase 600 weight 0.08em tracking */
+.eyebrow-label {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-forest-ink);
+}
+
+/* Shadowless Surface Panels */
+.surface-cream {
+  background-color: var(--color-cream-paper);
+  border-radius: 14px;
+  box-shadow: none !important;
+}
+
+.surface-keylime {
+  background-color: var(--color-keylime-wash);
+  border-radius: 14px;
+  box-shadow: none !important;
+}
+
+.surface-mint {
+  background-color: var(--color-mint-veil);
+  border-radius: 14px;
+  box-shadow: none !important;
+}
+
+.surface-sage {
+  background-color: var(--color-sage-mist);
+  border-radius: 14px;
+  box-shadow: none !important;
+}
+
+.surface-slate {
+  background-color: var(--color-slate-hush);
+  border-radius: 14px;
+  box-shadow: none !important;
+}
+
+/* Buttons */
+.btn-forest {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
-  padding: 0.75rem 1.5rem;
-  border-radius: 0.75rem;
-  font-weight: 600;
-  font-size: 0.875rem;
-  background-color: #7c3aed;
-  color: white;
+  background-color: var(--color-forest-ink);
+  color: var(--color-cream-paper);
+  border-radius: 14px;
+  padding: 14px 21px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 400;
+  text-decoration: none;
   border: none;
   cursor: pointer;
-  transition: background-color 0.2s, box-shadow 0.2s;
-  box-shadow: 0 0 24px rgba(139, 92, 246, 0.35);
-  text-decoration: none;
-}
-.btn-glow:hover {
-  background-color: #8b5cf6;
-  box-shadow: 0 0 36px rgba(139, 92, 246, 0.55);
-}
-.btn-glow:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-  box-shadow: none;
+  box-shadow: none !important;
+  transition: background-color 0.2s ease, opacity 0.2s ease;
 }
 
-/* ---- Secondary button ---- */
+.btn-forest:hover {
+  background-color: var(--color-forest-shadow);
+}
+
+.btn-forest-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background-color: var(--color-forest-ink);
+  color: var(--color-cream-paper);
+  border-radius: 9999px;
+  padding: 10px 20px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 400;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  box-shadow: none !important;
+  transition: background-color 0.2s ease;
+}
+
+.btn-forest-pill:hover {
+  background-color: var(--color-forest-shadow);
+}
+
+.btn-outline-forest {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background-color: transparent;
+  color: var(--color-forest-ink);
+  border: 1px solid var(--color-forest-ink);
+  border-radius: 14px;
+  padding: 13px 20px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 400;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: none !important;
+  transition: background-color 0.2s ease;
+}
+
+.btn-outline-forest:hover {
+  background-color: var(--color-keylime-wash);
+}
+
+/* Legacy support mapping */
+.btn-glow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background-color: var(--color-forest-ink);
+  color: var(--color-cream-paper);
+  border-radius: 14px;
+  padding: 14px 21px;
+  font-size: 14px;
+  font-weight: 400;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  box-shadow: none !important;
+  transition: background-color 0.2s ease;
+}
+
+.btn-glow:hover {
+  background-color: var(--color-forest-shadow);
+}
+
 .btn-secondary {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
-  padding: 0.625rem 1.25rem;
-  border-radius: 0.75rem;
-  font-weight: 500;
-  font-size: 0.875rem;
-  background-color: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  color: #cbd5e1;
+  background-color: var(--color-cream-paper);
+  color: var(--color-forest-ink);
+  border: 1px solid var(--color-border-mist);
+  border-radius: 14px;
+  padding: 13px 20px;
+  font-size: 14px;
+  font-weight: 400;
   text-decoration: none;
-  transition: all 0.2s;
-}
-.btn-secondary:hover {
-  background-color: rgba(255, 255, 255, 0.10);
-  border-color: rgba(255, 255, 255, 0.20);
-  color: white;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
-/* ---- Drop zone ---- */
+.btn-secondary:hover {
+  background-color: var(--color-keylime-wash);
+  border-color: var(--color-sage-mist);
+}
+
+/* Badges & Tags */
+.badge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  background-color: var(--color-cream-paper);
+  color: var(--color-forest-ink);
+  border-radius: 999px;
+  padding: 9px 14px;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.badge-keylime {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  background-color: var(--color-keylime-wash);
+  color: var(--color-forest-ink);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.badge-sage {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  background-color: var(--color-sage-mist);
+  color: var(--color-forest-ink);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* Drop Zone */
 .drop-zone {
-  border: 2px dashed rgba(255, 255, 255, 0.15);
-  border-radius: 1rem;
-  transition: all 0.2s;
+  background-color: var(--color-cream-paper);
+  border: 1.5px dashed var(--color-sage-mist);
+  border-radius: 14px;
+  transition: all 0.2s ease;
   cursor: pointer;
 }
-.drop-zone:hover, .drop-zone.active {
-  border-color: rgba(139, 92, 246, 0.5);
-  background-color: rgba(139, 92, 246, 0.05);
-}
+
+.drop-zone:hover,
 .drop-zone.active {
-  border-color: #a78bfa;
-  background-color: rgba(139, 92, 246, 0.10);
+  border-color: var(--color-forest-ink);
+  background-color: var(--color-keylime-wash);
 }
 
-/* ---- Status badges ---- */
-.badge-detected {
-  background-color: rgba(239, 68, 68, 0.15);
-  color: #f87171;
-  border: 1px solid rgba(239, 68, 68, 0.30);
-}
-.badge-clear {
-  background-color: rgba(16, 185, 129, 0.15);
-  color: #34d399;
-  border: 1px solid rgba(16, 185, 129, 0.30);
-}
-.badge-warning {
-  background-color: rgba(245, 158, 11, 0.15);
-  color: #fbbf24;
-  border: 1px solid rgba(245, 158, 11, 0.30);
+/* Glass replacement for flat botanical paper layers */
+.glass {
+  background-color: var(--color-cream-paper);
+  border: 1px solid var(--color-border-mist);
+  border-radius: 14px;
+  box-shadow: none !important;
 }
 
-/* ---- Animated pulse ring ---- */
-@keyframes ring-pulse {
-  0%   { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.4); }
-  70%  { box-shadow: 0 0 0 12px rgba(139, 92, 246, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0); }
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
 }
-.pulse-ring {
-  animation: ring-pulse 2s infinite;
+::-webkit-scrollbar-track {
+  background: var(--color-cream-paper);
 }
-
-/* ---- Scrollbar ---- */
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.10);
-  border-radius: 9999px;
-}
-
-/* ---- Base ---- */
-body {
-  background-color: #0a0b14;
-  color: #f1f5f9;
-  min-height: 100vh;
+  background: var(--color-slate-hush);
+  border-radius: 999px;
 }

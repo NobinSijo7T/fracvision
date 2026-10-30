@@ -78,7 +78,7 @@ def build_detection_dataset(records: list[dict], adapter, image_size: int, augme
     return DetectionDataset()
 
 
-def train(config_path: str, dry_run: bool = False) -> None:
+def train(config_path: str, dry_run: bool = False, epochs_override: int | None = None) -> None:
     cfg = yaml.safe_load(Path(config_path).read_text(encoding="utf-8"))
     det_cfg = cfg.get("training", {}).get("phase_2_detection", {})
     data_cfg = cfg.get("data", {})
@@ -121,6 +121,19 @@ def train(config_path: str, dry_run: bool = False) -> None:
     all_classes = list({v for v in class_names.values()} | set(
         cfg.get("class_mappings", {}).get("grazpedwri", {}).get("detection_classes", [])
     ))
+    observed_labels = {
+        str(annotation.get("label"))
+        for record in train_rows
+        for annotation in record.get("annotations", [])
+        if annotation.get("label")
+    }
+    missing_labels = sorted(set(all_classes) - observed_labels)
+    if missing_labels:
+        logger.warning(
+            "No training annotations found for configured classes: %s. "
+            "Those class scores cannot become reliable until the corresponding dataset is available.",
+            ", ".join(missing_labels),
+        )
 
     from model.models.rtdetrv2.detector import RTDETRv2Detector
     detector = RTDETRv2Detector(
@@ -130,7 +143,9 @@ def train(config_path: str, dry_run: bool = False) -> None:
         device=device,
     )
 
-    epochs = det_cfg.get("epochs", 50)
+    epochs = epochs_override if epochs_override is not None else det_cfg.get("epochs", 5)
+    if epochs < 1:
+        raise ValueError("epochs must be at least 1")
     lr = det_cfg.get("learning_rate", 1e-4)
     optimizer = torch.optim.AdamW(
         [p for p in detector.parameters() if p.requires_grad],
@@ -159,16 +174,103 @@ def train(config_path: str, dry_run: bool = False) -> None:
     ckpt_dir.mkdir(parents=True, exist_ok=True)
     best_map = 0.0
 
+    if detector.processor is None:
+        raise RuntimeError("RT-DETR processor is unavailable; install transformers and retry.")
+
+    class_to_id = {name: i for i, name in enumerate(sorted(all_classes))}
+
+    def box_iou(left, right):
+        x1 = max(left[0], right[0]); y1 = max(left[1], right[1])
+        x2 = min(left[2], right[2]); y2 = min(left[3], right[3])
+        intersection = max(0.0, x2 - x1) * max(0.0, y2 - y1)
+        area_left = max(0.0, left[2] - left[0]) * max(0.0, left[3] - left[1])
+        area_right = max(0.0, right[2] - right[0]) * max(0.0, right[3] - right[1])
+        union = area_left + area_right - intersection
+        return intersection / union if union else 0.0
+
+    def make_batch(record: dict, image_index: int):
+        from PIL import Image
+
+        image = Image.open(record["image_path"]).convert("RGB")
+        width, height = image.size
+        annotations = []
+        for box in record.get("annotations", []):
+            if box.get("bbox_xyxy") and len(box["bbox_xyxy"]) == 4:
+                x1, y1, x2, y2 = [float(v) for v in box["bbox_xyxy"]]
+            elif box.get("bbox_yolo") and len(box["bbox_yolo"]) == 4:
+                cx, cy, bw, bh = [float(v) for v in box["bbox_yolo"]]
+                x1, y1 = (cx - bw / 2) * width, (cy - bh / 2) * height
+                x2, y2 = (cx + bw / 2) * width, (cy + bh / 2) * height
+            else:
+                continue
+            x1, y1 = max(0.0, x1), max(0.0, y1)
+            x2, y2 = min(float(width), x2), min(float(height), y2)
+            label = str(box.get("label", "fracture"))
+            if x2 <= x1 or y2 <= y1 or label not in class_to_id:
+                continue
+            xyxy = [x1, y1, x2, y2]
+            # FracAtlas exposes the same annotation through YOLO and VOC.
+            # Keep one copy so the matcher is not trained on duplicate targets.
+            if any(item["label"] == label and box_iou(xyxy, item["xyxy"]) >= 0.95 for item in annotations):
+                continue
+            annotations.append({
+                "bbox": [x1, y1, x2 - x1, y2 - y1],
+                "category_id": class_to_id[label],
+                "area": (x2 - x1) * (y2 - y1),
+                "iscrowd": 0,
+                "label": label,
+                "xyxy": xyxy,
+            })
+
+        for annotation in annotations:
+            annotation.pop("label", None)
+            annotation.pop("xyxy", None)
+
+        encoded = detector.processor(
+            images=image,
+            annotations={"image_id": image_index, "annotations": annotations},
+            return_tensors="pt",
+        )
+        labels = encoded.pop("labels")
+        return encoded, labels
+
     logger.info("Training for %d epochs (dry_run=%s) ...", epochs if not dry_run else 1, dry_run)
     for epoch in range(1 if dry_run else epochs):
         detector.train()
         epoch_loss = 0.0
+        processed = 0
         n_batches = min(5, len(train_rows)) if dry_run else len(train_rows)
         for i, record in enumerate(train_rows[:n_batches]):
             img_path = record.get("image_path")
             if not img_path or not Path(img_path).exists():
                 continue
             try:
+                batch, labels = make_batch(record, i)
+                batch = {key: value.to(device) for key, value in batch.items()}
+                labels = [{key: value.to(device) for key, value in item.items()} for item in labels]
+                optimizer.zero_grad(set_to_none=True)
+                outputs = detector.model(**batch, labels=labels)
+                loss = outputs.loss
+                if loss is None or not torch.isfinite(loss):
+                    continue
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(
+                    detector.parameters(),
+                    cfg.get("training", {}).get("gradient_clip", 1.0),
+                )
+                optimizer.step()
+                epoch_loss += float(loss.detach().cpu())
+                processed += 1
+                if (i + 1) % 100 == 0:
+                    logger.info(
+                        "Epoch %d/%d progress: %d/%d images, mean loss %.4f",
+                        epoch + 1,
+                        epochs,
+                        i + 1,
+                        n_batches,
+                        epoch_loss / max(processed, 1),
+                    )
+                continue
                 from model.data.preprocessing.preprocess import preprocess_image
                 img, _ = preprocess_image(img_path, image_size=image_size, return_tensor=True)
                 img_t = torch.from_numpy(img.transpose(2, 0, 1)).float().unsqueeze(0).to(device)
@@ -201,8 +303,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Train RT-DETRv2 fracture detector.")
     parser.add_argument("--config", default="model/configs/config.yaml")
     parser.add_argument("--dry-run", action="store_true", help="Run 1 epoch on 5 samples for validation")
+    parser.add_argument("--epochs", type=int, default=None, help="Override configured detector epochs")
     args = parser.parse_args()
-    train(args.config, dry_run=args.dry_run)
+    train(args.config, dry_run=args.dry_run, epochs_override=args.epochs)
 
 
 if __name__ == "__main__":

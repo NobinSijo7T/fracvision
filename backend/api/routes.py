@@ -10,9 +10,12 @@ from __future__ import annotations
 
 import logging
 import tempfile
+from datetime import datetime
 from pathlib import Path
+from uuid import uuid4
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from sqlalchemy.orm import Session
 
 from backend.core.pipeline_state import PipelineState
 from backend.schemas.schemas import (
@@ -23,7 +26,15 @@ from backend.schemas.schemas import (
     SegmentationSchema,
     ClassificationSchema,
     ComparisonResponse,
+    HistoryRecordSchema,
     CLINICAL_DISCLAIMER,
+)
+from backend.database.models import (
+    ImagingStudy,
+    Patient,
+    Prediction,
+    SessionLocal,
+    get_db,
 )
 
 logger = logging.getLogger(__name__)
@@ -151,6 +162,7 @@ async def predict(file: UploadFile = File(...)) -> PredictionResponse:
             area_pixels=s.area_pixels,
             mask_score=s.mask_score,
             model_loaded=s.model_loaded,
+            mask_data_url=s.mask_data_url,
             warning=s.warning,
         )
     cls_out = None
@@ -163,7 +175,7 @@ async def predict(file: UploadFile = File(...)) -> PredictionResponse:
             calibrated=c.calibrated,
         )
 
-    return PredictionResponse(
+    response = PredictionResponse(
         image_path=file.filename,
         image_hw=result.image_hw,
         qc_passed=result.qc_passed,
@@ -175,6 +187,82 @@ async def predict(file: UploadFile = File(...)) -> PredictionResponse:
         classification=cls_out,
         stage_errors=result.stage_errors,
     )
+
+    # Persist the prediction without storing the uploaded image itself. The
+    # de-identified upload is attached to one anonymous patient timeline until
+    # patient identity support is added to the intake flow.
+    db = SessionLocal()
+    try:
+        patient = db.query(Patient).filter(Patient.patient_id == "anonymous-upload").first()
+        if patient is None:
+            patient = Patient(patient_id="anonymous-upload", dataset_source="UPLOAD")
+            db.add(patient)
+            db.flush()
+
+        image_id = f"upload-{uuid4().hex}"
+        study = ImagingStudy(
+            patient_id=patient.patient_id,
+            image_id=image_id,
+            study_number=file.filename,
+            fracture_visible=result.fracture_detected,
+        )
+        segmentation = result.segmentation
+        prediction = Prediction(
+            image_id=image_id,
+            model_version="fracvision-local",
+            fracture_detected=result.fracture_detected,
+            fracture_confidence=result.fracture_confidence,
+            detections_json=[d.__dict__ for d in result.detections],
+            classification_json=(result.classification.__dict__ if result.classification else None),
+            segmentation_json=(
+                {
+                    "mask_available": segmentation.mask_available,
+                    "area_pixels": segmentation.area_pixels,
+                    "mask_score": segmentation.mask_score,
+                }
+                if segmentation else None
+            ),
+            qc_passed=result.qc_passed,
+            stage_errors_json=result.stage_errors,
+        )
+        db.add(study)
+        db.add(prediction)
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Prediction completed but history persistence failed: %s", exc)
+    finally:
+        db.close()
+
+    return response
+
+
+@router.get("/history", response_model=list[HistoryRecordSchema], tags=["History"])
+async def history(db: Session = Depends(get_db)) -> list[HistoryRecordSchema]:
+    """Return persisted upload predictions, newest first."""
+    rows = (
+        db.query(Prediction, ImagingStudy)
+        .join(ImagingStudy, Prediction.image_id == ImagingStudy.image_id)
+        .order_by(Prediction.created_at.desc())
+        .limit(100)
+        .all()
+    )
+    records: list[HistoryRecordSchema] = []
+    for prediction, study in rows:
+        classification = prediction.classification_json or {}
+        segmentation = prediction.segmentation_json or {}
+        records.append(HistoryRecordSchema(
+            id=prediction.id,
+            image_id=prediction.image_id,
+            filename=study.study_number,
+            created_at=(prediction.created_at or datetime.utcnow()).isoformat(),
+            fracture_detected=prediction.fracture_detected,
+            fracture_confidence=float(prediction.fracture_confidence or 0.0),
+            classification_labels=classification.get("labels", []),
+            segmentation_available=bool(segmentation.get("mask_available", False)),
+            mask_score=segmentation.get("mask_score"),
+        ))
+    return records
 
 
 # ---------------------------------------------------------------------------

@@ -24,6 +24,8 @@ Usage:
 from __future__ import annotations
 
 import logging
+import base64
+from io import BytesIO
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Any
@@ -53,6 +55,7 @@ class SegmentationResult:
     area_pixels: int
     mask_score: float | None
     model_loaded: bool
+    mask_data_url: str | None = None
     warning: str | None = None
 
 
@@ -167,6 +170,11 @@ class FracVisionPipeline:
                 state = torch.load(ckpt, map_location="cpu")
                 classifier.load_state_dict(state, strict=False)
                 logger.info("Loaded classifier checkpoint: %s", ckpt)
+            # DINOv2 places embeddings on its resolved device.  The classifier
+            # is created on CPU by default, so explicitly colocate it with the
+            # extractor before inference (especially when CUDA is available).
+            classifier = classifier.to(extractor.device)
+            classifier.eval()
         except Exception as exc:
             logger.warning("DINOv2/Classifier load failed: %s", exc)
             extractor, classifier = None, None
@@ -266,11 +274,24 @@ class FracVisionPipeline:
         try:
             if self.segmentor is not None and primary_bbox is not None:
                 seg_out = self.segmentor.segment(image_np, primary_bbox)
+                mask_data_url = None
+                mask = seg_out.get("mask")
+                if mask is not None and np.asarray(mask).any():
+                    from PIL import Image
+                    mask_rgba = np.zeros((*mask.shape, 4), dtype=np.uint8)
+                    mask_rgba[..., 0] = 248
+                    mask_rgba[..., 1] = 113
+                    mask_rgba[..., 2] = 113
+                    mask_rgba[..., 3] = np.asarray(mask, dtype=bool).astype(np.uint8) * 120
+                    buffer = BytesIO()
+                    Image.fromarray(mask_rgba, mode="RGBA").save(buffer, format="PNG", optimize=True)
+                    mask_data_url = "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
                 seg_result = SegmentationResult(
                     mask_available=seg_out.get("model_loaded", False),
                     area_pixels=seg_out.get("area_pixels", 0),
                     mask_score=seg_out.get("mask_score"),
                     model_loaded=seg_out.get("model_loaded", False),
+                    mask_data_url=mask_data_url,
                     warning=seg_out.get("warning"),
                 )
         except Exception as exc:

@@ -18,7 +18,12 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, relationship, sessionmaker
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./fracvision_dev.db")
+_DEFAULT_DB_PATH = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "fracvision_dev.db")
+)
+DATABASE_URL = os.environ.get(
+    "DATABASE_URL", f"sqlite:///{_DEFAULT_DB_PATH.replace(os.sep, '/') }"
+)
 
 engine = create_engine(
     DATABASE_URL,

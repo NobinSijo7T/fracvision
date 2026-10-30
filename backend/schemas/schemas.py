@@ -30,6 +30,7 @@ class SegmentationSchema(BaseModel):
     area_pixels: int
     mask_score: float | None
     model_loaded: bool
+    mask_data_url: str | None = None
     warning: str | None = None
 
 
@@ -54,6 +55,18 @@ class PredictionResponse(BaseModel):
     clinically_validated: bool = False
     recovery_training_enabled: bool = False
     disclaimer: str = CLINICAL_DISCLAIMER
+
+
+class HistoryRecordSchema(BaseModel):
+    id: int
+    image_id: str
+    filename: str | None = None
+    created_at: str
+    fracture_detected: bool | None = None
+    fracture_confidence: float = 0.0
+    classification_labels: list[str] = Field(default_factory=list)
+    segmentation_available: bool = False
+    mask_score: float | None = None
 
 
 class ComparisonRequest(BaseModel):

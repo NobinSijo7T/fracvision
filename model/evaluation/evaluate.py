@@ -229,6 +229,38 @@ def run_evaluation(config_path: str, smoke: bool = False) -> None:
 
     from model.training.train_classifier import FRACATLAS_LABELS
     y_true_list, y_prob_list = [], []
+    detection_totals = {"tp": 0, "fp": 0, "fn": 0}
+    detection_images = 0
+
+    def record_boxes(rec: dict, image_path: str) -> list[list[float]]:
+        from PIL import Image
+        width, height = Image.open(image_path).size
+        boxes = []
+        for annotation in rec.get("annotations", []):
+            if annotation.get("bbox_xyxy"):
+                box = [float(value) for value in annotation["bbox_xyxy"]]
+            elif annotation.get("bbox_yolo"):
+                cx, cy, bw, bh = [float(value) for value in annotation["bbox_yolo"]]
+                box = [
+                    (cx - bw / 2) * width,
+                    (cy - bh / 2) * height,
+                    (cx + bw / 2) * width,
+                    (cy + bh / 2) * height,
+                ]
+            else:
+                continue
+            if not any(compute_box_iou(box, old) >= 0.95 for old in boxes):
+                boxes.append(box)
+        return boxes
+
+    def compute_box_iou(left: list[float], right: list[float]) -> float:
+        x1, y1 = max(left[0], right[0]), max(left[1], right[1])
+        x2, y2 = min(left[2], right[2]), min(left[3], right[3])
+        intersection = max(0.0, x2 - x1) * max(0.0, y2 - y1)
+        area_left = max(0.0, left[2] - left[0]) * max(0.0, left[3] - left[1])
+        area_right = max(0.0, right[2] - right[0]) * max(0.0, right[3] - right[1])
+        union = area_left + area_right - intersection
+        return intersection / union if union else 0.0
 
     for row in test_rows:
         img_path = row.get("image_path")
@@ -238,6 +270,23 @@ def run_evaluation(config_path: str, smoke: bool = False) -> None:
         true_labels = rec.get("labels", [])
         try:
             pred = pipeline.predict(img_path)
+            gt_boxes = record_boxes(rec, img_path)
+            pred_boxes = [
+                detection.bbox_xyxy
+                for detection in pred.detections
+                if detection.label == "fracture"
+            ]
+            pred_scores = [
+                detection.confidence
+                for detection in pred.detections
+                if detection.label == "fracture"
+            ]
+            image_detection = compute_detection_metrics(
+                pred_boxes, pred_scores, gt_boxes, iou_threshold=0.50
+            )
+            for key in ("tp", "fp", "fn"):
+                detection_totals[key] += image_detection[key]
+            detection_images += 1
             if pred.classification is not None:
                 probs = [pred.classification.probabilities.get(lbl, 0.0) for lbl in FRACATLAS_LABELS]
                 gt = [1.0 if lbl in true_labels else 0.0 for lbl in FRACATLAS_LABELS]
@@ -262,6 +311,22 @@ def run_evaluation(config_path: str, smoke: bool = False) -> None:
         metrics["classification"] = {"note": "No valid test samples evaluated"}
         logger.warning("No classification predictions generated.")
 
+    tp = detection_totals["tp"]
+    fp = detection_totals["fp"]
+    fn = detection_totals["fn"]
+    precision = tp / (tp + fp) if tp + fp else 0.0
+    recall = tp / (tp + fn) if tp + fn else 0.0
+    metrics["detection"] = {
+        "images_evaluated": detection_images,
+        "iou_threshold": 0.50,
+        "true_positives": tp,
+        "false_positives": fp,
+        "false_negatives": fn,
+        "precision": precision,
+        "recall": recall,
+        "f1": 2 * precision * recall / (precision + recall) if precision + recall else 0.0,
+    }
+
     # Write metrics
     (reports_dir / "metrics.json").write_text(json.dumps(metrics, indent=2), encoding="utf-8")
 
@@ -283,6 +348,13 @@ def run_evaluation(config_path: str, smoke: bool = False) -> None:
                 summary_lines.append(
                     f"- **{cls_name}**: AUROC={vals['auroc']:.3f}, AUPRC={vals['auprc']:.3f}, F1={vals['f1']:.3f}"
                 )
+    detection = metrics["detection"]
+    summary_lines.extend([
+        "",
+        "## Detection Results",
+        f"- Precision@IoU50={detection['precision']:.3f}, Recall@IoU50={detection['recall']:.3f}, F1={detection['f1']:.3f}",
+        f"- TP={detection['true_positives']}, FP={detection['false_positives']}, FN={detection['false_negatives']}",
+    ])
 
     (reports_dir / "evaluation_summary.md").write_text("\n".join(summary_lines), encoding="utf-8")
 

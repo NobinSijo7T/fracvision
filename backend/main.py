@@ -29,6 +29,9 @@ async def lifespan(app: FastAPI):
     """Initialise and shut down the inference pipeline."""
     logger.info("Starting FracVision backend — loading models ...")
     try:
+        from backend.database.models import create_tables
+        create_tables()
+        logger.info("Persistence database is ready")
         from model.inference.pipeline import FracVisionPipeline
         pipeline = FracVisionPipeline.from_config(_CONFIG_PATH)
         PipelineState.pipeline = pipeline
